@@ -1,0 +1,4 @@
+*.swp
+
+credentials/*
+!credentials/*.template.yml
