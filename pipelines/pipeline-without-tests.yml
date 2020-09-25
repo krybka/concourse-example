@@ -6,14 +6,6 @@ resource_types:
 
 
 resources:
-- name: test-branch
-  type: git
-  source:
-    uri: ((repo-uri))
-    branch: test
-    private_key: ((private-repo-key))
-  check_every: 10s
-
 - name: stage-branch
   type: git
   source:
@@ -57,25 +49,25 @@ jobs:
   serial: true
   build_logs_to_retain: 10
   plan:
-  - get: test-branch
+  - get: stage-branch
     trigger: true
   - put: build-status
     params:
       build_status: INPROGRESS
-      repository: test-branch
-      description_file: test-branch/build_descriptions/build-prod-images.txt
+      repository: stage-branch
+      description_file: stage-branch/build_descriptions/build-prod-images.txt
   - task: source-pre-prod
     input_mapping:
-      source: test-branch
-    file: test-branch/tasks/source-pre-prod.yml
+      source: stage-branch
+    file: stage-branch/tasks/source-pre-prod.yml
   - get: prod-base-image
     params:
       save: true
   - put: prod-image
     params:
       load_base: prod-base-image
-      build: test-branch
-      dockerfile: test-branch/((prod-image-dockerfile-path))
+      build: stage-branch
+      dockerfile: stage-branch/((prod-image-dockerfile-path))
       build_args:
         BASE_IMAGE: ((prod-base-repository))
       # only the first image is taged as latest
@@ -89,39 +81,31 @@ jobs:
     put: build-status
     params:
       build_status: SUCCESSFUL
-      repository: test-branch
-      description_file: test-branch/build_descriptions/build-prod-images.txt
+      repository: stage-branch
+      description_file: stage-branch/build_descriptions/build-prod-images.txt
   on_failure:
     put: build-status
     params:
       build_status: FAILED
-      repository: test-branch
-      description_file: test-branch/build_descriptions/build-prod-images.txt
+      repository: stage-branch
+      description_file: stage-branch/build_descriptions/build-prod-images.txt
 
 - name: check-force-merge
   serial: true
   build_logs_to_retain: 10
   plan:
-  - get: test-branch
+  - get: stage-branch
     trigger: true
     passed: [build-prod-images]
   - put: build-status
     params:
       build_status: INPROGRESS
-      repository: test-branch
-      description_file: test-branch/build_descriptions/check-force-merge.txt
-  - task: force-stage-merge
-    input_mapping:
-      source-branch: test-branch
-    file: test-branch/tasks/git-force-merge-by-commit.yml
-    params:
-      DESTINATION_BRANCH: stage
-      OAUTH_CLIENT_KEY: ((bitbucket-client-id))
-      OAUTH_CLIENT_SECRET: ((bitbucket-client-secret))
+      repository: stage-branch
+      description_file: stage-branch/build_descriptions/check-force-merge.txt
   - task: force-prod-merge
     input_mapping:
-      source-branch: test-branch
-    file: test-branch/tasks/git-force-merge-by-commit.yml
+      source-branch: stage-branch
+    file: stage-branch/tasks/git-force-merge-by-commit.yml
     params:
       DESTINATION_BRANCH: prod
       OAUTH_CLIENT_KEY: ((bitbucket-client-id))
@@ -130,59 +114,59 @@ jobs:
     put: build-status
     params:
       build_status: SUCCESSFUL
-      repository: test-branch
-      description_file: test-branch/build_descriptions/check-force-merge.txt
+      repository: stage-branch
+      description_file: stage-branch/build_descriptions/check-force-merge.txt
   on_failure:
     put: build-status
     params:
       build_status: FAILED
-      repository: test-branch
-      description_file: test-branch/build_descriptions/check-force-merge.txt
+      repository: stage-branch
+      description_file: stage-branch/build_descriptions/check-force-merge.txt
 
-- name: deploy-test-env
+- name: deploy-stage-env
   serial: true
   build_logs_to_retain: 10
   plan:
-  - get: test-branch
+  - get: stage-branch
     trigger: true
     passed: [build-prod-images]
   - put: build-status
     params:
       build_status: INPROGRESS
-      repository: test-branch
-      description_file: test-branch/build_descriptions/deploy-test-env.txt
+      repository: stage-branch
+      description_file: stage-branch/build_descriptions/deploy-stage-env.txt
   - task: deploy
     input_mapping:
-      source: test-branch
-    file: test-branch/tasks/rancher-deploy.yml
+      source: stage-branch
+    file: stage-branch/tasks/rancher-deploy.yml
     params:
       COMPOSE_PROJECT_NAME: ((compose-project-name))
-      DJANGO_SETTINGS_MODULE: ((test-django-settings))
-      SENTRY_ENVIRONMENT: test
-      RANCHER_URL: ((test-rancher-url))
-      RANCHER_ACCESS_KEY: ((test-rancher-access-key))
-      RANCHER_SECRET_KEY: ((test-rancher-secret-key))
+      DJANGO_SETTINGS_MODULE: ((stage-django-settings))
+      SENTRY_ENVIRONMENT: stage
+      RANCHER_URL: ((stage-rancher-url))
+      RANCHER_ACCESS_KEY: ((stage-rancher-access-key))
+      RANCHER_SECRET_KEY: ((stage-rancher-secret-key))
       SENTRY_DSN: ((sentry-dsn))
       SECRETS_FROM_ENV_FILES: 1
-      MONGO_REPLICA_KEYFILE_URL: ((test-mongo-replica-keyfile-url))
+      MONGO_REPLICA_KEYFILE_URL: ((stage-mongo-replica-keyfile-url))
     timeout: 5m
     attempts: 3 # for Client.Timeout exceeded while awaiting headers
   - in_parallel:
     - task: init-mongo-rs
-      file: test-branch/tasks/rancher-init-mongo-rs.yml
+      file: stage-branch/tasks/rancher-init-mongo-rs.yml
       params:
-        RANCHER_URL: ((test-rancher-url))
-        RANCHER_ACCESS_KEY: ((test-rancher-access-key))
-        RANCHER_SECRET_KEY: ((test-rancher-secret-key))
+        RANCHER_URL: ((stage-rancher-url))
+        RANCHER_ACCESS_KEY: ((stage-rancher-access-key))
+        RANCHER_SECRET_KEY: ((stage-rancher-secret-key))
         RANCHER_CONTAINER_NAME: ((rancher-mongo-container-name))
       timeout: 1m
     # add more initial tasks here, like this:
     #- task: import-extra-data
-    #  file: test-branch/tasks/rancher-import-extra-data.yml
+    #  file: stage-branch/tasks/rancher-import-extra-data.yml
     #  params:
-    #    RANCHER_URL: ((test-rancher-url))
-    #    RANCHER_ACCESS_KEY: ((test-rancher-access-key))
-    #    RANCHER_SECRET_KEY: ((test-rancher-secret-key))
+    #    RANCHER_URL: ((stage-rancher-url))
+    #    RANCHER_ACCESS_KEY: ((stage-rancher-access-key))
+    #    RANCHER_SECRET_KEY: ((stage-rancher-secret-key))
     #    RANCHER_CONTAINER_NAME: ((rancher-main-container-name))
     #    EXTRA_DATA_CSV_URL: ((extra-data-csv-url))
     #    EXTRA_DATA_DIR: /media/extra_data
@@ -191,87 +175,14 @@ jobs:
     put: build-status
     params:
       build_status: SUCCESSFUL
-      repository: test-branch
-      description_file: test-branch/build_descriptions/deploy-test-env.txt
+      repository: stage-branch
+      description_file: stage-branch/build_descriptions/deploy-stage-env.txt
   on_failure:
     put: build-status
     params:
       build_status: FAILED
-      repository: test-branch
-      description_file: test-branch/build_descriptions/deploy-test-env.txt
-
-- name: run-tests
-  serial: false
-  build_logs_to_retain: 10
-  plan:
-  - get: test-branch
-    trigger: true
-    passed: [deploy-test-env]
-  - put: build-status
-    params:
-      build_status: INPROGRESS
-      repository: test-branch
-      description_file: test-branch/build_descriptions/run-tests.txt
-  - task: integration-tests
-    file: test-branch/tasks/rancher-exec-entrypoint.yml
-    params:
-      RANCHER_URL: ((test-rancher-url))
-      RANCHER_ACCESS_KEY: ((test-rancher-access-key))
-      RANCHER_SECRET_KEY: ((test-rancher-secret-key))
-      RANCHER_CONTAINER_NAME: ((rancher-main-container-name))
-      ENTRYPOINT_CMD: 'test'
-    timeout: 15m
-  - task: stage-merge
-    input_mapping:
-      source-branch: test-branch
-    file: test-branch/tasks/git-merge.yml
-    params:
-      DESTINATION_BRANCH: stage
-      OAUTH_CLIENT_KEY: ((bitbucket-client-id))
-      OAUTH_CLIENT_SECRET: ((bitbucket-client-secret))
-  on_success:
-    put: build-status
-    params:
-      build_status: SUCCESSFUL
-      repository: test-branch
-      description_file: test-branch/build_descriptions/run-tests.txt
-  on_failure:
-    put: build-status
-    params:
-      build_status: FAILED
-      repository: test-branch
-      description_file: test-branch/build_descriptions/run-tests.txt
-
-- name: test-prod-merge
-  serial: true
-  build_logs_to_retain: 10
-  plan:
-  - get: test-branch
-  - put: build-status
-    params:
-      build_status: INPROGRESS
-      repository: test-branch
-      description_file: test-branch/build_descriptions/test-prod-merge.txt
-  - task: prod-merge
-    input_mapping:
-      source-branch: test-branch
-    file: test-branch/tasks/git-merge.yml
-    params:
-      DESTINATION_BRANCH: prod
-      OAUTH_CLIENT_KEY: ((bitbucket-client-id))
-      OAUTH_CLIENT_SECRET: ((bitbucket-client-secret))
-  on_success:
-    put: build-status
-    params:
-      build_status: SUCCESSFUL
-      repository: test-branch
-      description_file: test-branch/build_descriptions/test-prod-merge.txt
-  on_failure:
-    put: build-status
-    params:
-      build_status: FAILED
-      repository: test-branch
-      description_file: test-branch/build_descriptions/test-prod-merge.txt
+      repository: stage-branch
+      description_file: stage-branch/build_descriptions/deploy-stage-env.txt
 
 - name: stage-prod-merge
   serial: true
@@ -447,16 +358,16 @@ jobs:
 #      description_file: prod-branch/build_descriptions/push-extra-data.txt
 
 
-- name: clear-test-env
+- name: clear-stage-env
   build_logs_to_retain: 1
   plan:
-  - get: test-branch
+  - get: stage-branch
   - task: clear-services
     input_mapping:
-      source: test-branch
-    file: test-branch/tasks/rancher-clear.yml
+      source: stage-branch
+    file: stage-branch/tasks/rancher-clear.yml
     params:
       COMPOSE_PROJECT_NAME: ((compose-project-name))
-      RANCHER_URL: ((test-rancher-url))
-      RANCHER_ACCESS_KEY: ((test-rancher-access-key))
-      RANCHER_SECRET_KEY: ((test-rancher-secret-key))
+      RANCHER_URL: ((stage-rancher-url))
+      RANCHER_ACCESS_KEY: ((stage-rancher-access-key))
+      RANCHER_SECRET_KEY: ((stage-rancher-secret-key))
