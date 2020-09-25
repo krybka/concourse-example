@@ -28,12 +28,12 @@ site.
 Pipelines
 ---------
 
-There are two pipelines configurations prepared. `pipeline-with-test.yml` with
-all valuable jobs, `pipeline-without-test.yml` - a subset of it without test
-environment, and `pipeline-deploy-only` -  a subset of jobs from the second one
+There are two pipelines configurations prepared. `build-test-stage-prod.yml`
+with all valuable jobs, `build-stage-prod.yml` - a subset of it without test
+environment, and `stage-prod` -  a subset of jobs from the second one
 without building production like images with the source code.
 
-Jobs in `pipelines/pipeline-with-test.yml`:
+Jobs in `pipelines/build-test-stage-prod.yml`:
 
 * build production-like images with the source code
 * deploy services on the test environment
@@ -43,7 +43,7 @@ Jobs in `pipelines/pipeline-with-test.yml`:
 
 If there are no tests in your project, you will not need to set up the test
 environment.
-Then you can use simplified `pipelines/pipeline-without-test.sh` where there are
+Then you can use simplified `pipelines/build-stage-prod.sh` where there are
 jobs:
 
 * build production-like images with the source code
@@ -52,8 +52,7 @@ jobs:
 
 Moreover, if you want to start the project composed of public Docker images
 only, you will not need to build images with the source code at the beginning.
-Then you can use very simplified `pipelines/pipeline-deploy-only` where there
-are jobs:
+Then you can use very simplified `pipelines/stage-prod` where there are jobs:
 
 * deploy services on the stage environment
 * deploy services on the prod environment
@@ -71,11 +70,10 @@ First of all, you need to login to a proper target and team:
 fly --target [target-name] login --concourse-url https://[concourse-url] --team-name [team-name] --open-browser
 ```
 
-**Remember to set proper values in credentials/[pipeline-name].yml**
+**Remember to create your own `credentials/[pipeline-name].yml` from `credentials/[pipeline-name].template.yml`.**
 
 Then you can submit a pipeline configuration to Concourse:
 ```
-fly --target [target-name] set-pipeline --pipeline [pipeline-name] --config ./pipelines/pipeline-deploy-only.yml --load-vars-from credentials/[pipeline-name].yml
+fly --target [target-name] set-pipeline --pipeline [pipeline-name] --config ./pipelines/[pipeline-name].yml --load-vars-from credentials/[pipeline-name].yml
 ```
 and unpause it on the pipeline webpage.
-
