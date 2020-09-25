@@ -259,9 +259,9 @@ jobs:
     #- task: import-extra-data
     #  file: prod-branch/tasks/rancher-import-extra-data.yml
     #  params:
-    #    RANCHER_URL: ((test-rancher-url))
-    #    RANCHER_ACCESS_KEY: ((test-rancher-access-key))
-    #    RANCHER_SECRET_KEY: ((test-rancher-secret-key))
+    #    RANCHER_URL: ((prod-rancher-url))
+    #    RANCHER_ACCESS_KEY: ((prod-rancher-access-key))
+    #    RANCHER_SECRET_KEY: ((prod-rancher-secret-key))
     #    RANCHER_CONTAINER_NAME: ((rancher-main-container-name))
     #    EXTRA_DATA_CSV_URL: ((extra-data-csv-url))
     #    EXTRA_DATA_DIR: /media/extra_data
