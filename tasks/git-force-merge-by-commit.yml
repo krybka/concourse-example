@@ -1,0 +1,21 @@
+# check if a merge to a destination branch is forced by commit message
+platform: linux
+image_resource:
+  type: docker-image
+  source:
+    repository: mgbi/oauth-git
+inputs:
+  - name: source-branch
+params:
+  DESTINATION_BRANCH:
+  OAUTH_CLIENT_KEY:
+  OAUTH_CLIENT_SECRET:
+run:
+  dir: source-branch
+  path: sh
+  args:
+    - -exc
+    - |
+      git config user.email "admin@mgbi.pl"
+      git config user.name "Concourse CI"
+      git-force-merge-by-commit $DESTINATION_BRANCH

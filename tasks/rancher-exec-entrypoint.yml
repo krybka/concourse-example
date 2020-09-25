@@ -1,0 +1,18 @@
+# run an entrypoint command on the container
+platform: linux
+image_resource:
+  type: docker-image
+  source:
+    repository: mgbi/rancher-cli
+params:
+  RANCHER_URL:
+  RANCHER_ACCESS_KEY:
+  RANCHER_SECRET_KEY:
+  RANCHER_CONTAINER_NAME:
+  ENTRYPOINT_CMD:
+run:
+  path: sh
+  args:
+    - -exc
+    - |
+      rancher exec $RANCHER_CONTAINER_NAME ./entrypoint.sh $ENTRYPOINT_CMD

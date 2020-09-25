@@ -1,0 +1,1 @@
+Check if a merge to 'stage' and 'prod' branch is forced by the commit message

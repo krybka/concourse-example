@@ -1,0 +1,20 @@
+# perform pre-production tasks
+platform: linux
+image_resource:
+  type: docker-image
+  source:
+    # an image where the source dir is prepared before pushing a prod image
+    repository: mgbi/oauth-git
+inputs:
+  - name: source
+run:
+  dir: source
+  path: sh
+  args:
+    - -exc
+    - |
+      mkdir -p statics
+      # a tag for a docker image
+      git rev-parse --short $(cat .git/ref) > statics/tag.txt
+      # a preview for the last five commits
+      git log -5 > statics/last_commits.txt

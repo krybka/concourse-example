@@ -1,0 +1,36 @@
+# full project clearance
+platform: linux
+image_resource:
+  type: docker-image
+  source:
+    repository: mgbi/rancher-cli
+inputs:
+  - name: source
+params:
+  COMPOSE_PROJECT_NAME:
+  RANCHER_URL:
+  RANCHER_ACCESS_KEY:
+  RANCHER_SECRET_KEY:
+run:
+  dir: source
+  path: sh
+  args:
+    - -exc
+    - |
+      # Rancher does not support docker-compose '2.1' version and higher
+      sed -i "/version:/c version: '2'" docker-compose.yml
+
+      rancher_cli () {
+        rancher --file docker-compose.yml --file docker-compose.rancher.yml \
+          --rancher-file rancher-compose.yml "$@"
+      }
+      rancher_cli stop $COMPOSE_PROJECT_NAME
+      rancher_cli rm $COMPOSE_PROJECT_NAME
+
+      sleep 5
+
+      # try to stop the services once again in case any service was being restarted
+      # during the first attempt
+      rancher_cli rm --stop $COMPOSE_PROJECT_NAME
+
+      rancher volume rm $(rancher volume -q) > /dev/null || true

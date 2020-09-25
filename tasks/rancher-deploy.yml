@@ -1,0 +1,106 @@
+# service deployment and secrets creation
+platform: linux
+image_resource:
+  type: docker-image
+  source:
+    repository: mgbi/rancher-cli
+inputs:
+  - name: source
+params:
+  COMPOSE_PROJECT_NAME:
+  DJANGO_SETTINGS_MODULE:
+  SENTRY_ENVIRONMENT:
+  RANCHER_URL:
+  RANCHER_ACCESS_KEY:
+  RANCHER_SECRET_KEY:
+  SENTRY_DSN:
+  SECRETS_FROM_ENV_FILES:
+  MONGO_REPLICA_KEYFILE_URL:
+  MONGO_INITDB_ROOT_PASSWORD:
+  MONGO_MAINDB_PASSWORD:
+  POSTGRES_PASSWORD:
+  POSTGRES_SHARED_PASSWORD:
+run:
+  dir: source
+  path: sh
+  args:
+    - -exc
+    - |
+      # Rancher does not support docker-compose '2.1' version and higher
+      sed -i "/version:/c version: '2'" docker-compose.yml
+
+      test $DJANGO_SETTINGS_MODULE
+      test $SENTRY_ENVIRONMENT
+
+      echo DJANGO_SETTINGS_MODULE=$DJANGO_SETTINGS_MODULE > .env
+      echo SENTRY_ENVIRONMENT=$SENTRY_ENVIRONMENT >> .env
+
+      if [ "$SECRETS_FROM_ENV_FILES" = 1 ]; then
+        # use secrets from env files
+        source config/env_files/django.env
+        source config/env_files/mongo.env
+        source config/env_files/postgres.env
+      fi
+
+      create_secrets_files () {(
+        # subshell without printing executed commands
+        set +x
+        test $MONGO_REPLICA_KEYFILE_URL
+        test $MONGO_INITDB_ROOT_PASSWORD
+        test $MONGO_MAINDB_PASSWORD
+        test $POSTGRES_PASSWORD
+        test $POSTGRES_SHARED_PASSWORD
+        test $SENTRY_DSN
+
+        # the contents of the specified files will be used to create the secrets
+        # before creating the stack and starting the services
+        mkdir secrets
+        echo $MONGO_REPLICA_KEYFILE_URL > secrets/mongo-replica-keyfile-url.txt
+        echo $MONGO_INITDB_ROOT_PASSWORD > secrets/mongo-initdb-root-password.txt
+        echo $MONGO_MAINDB_PASSWORD > secrets/mongo-maindb-password.txt
+        echo $POSTGRES_PASSWORD > secrets/postgres-password.txt
+        echo $POSTGRES_SHARED_PASSWORD > secrets/postgres-shared-password.txt
+        echo $SENTRY_DSN > secrets/sentry-dsn.txt
+      )}
+
+      create_secrets_files
+
+      # remove secrets from env files (used in development environment)
+      sed -i -e '/^MONGO_INITDB_ROOT_PASSWORD/d' \
+        -e '/^MONGO_MAINDB_PASSWORD/d' config/env_files/mongo.env
+      sed -i -e '/^POSTGRES_PASSWORD/d' -e '/^POSTGRES_MAIN_PASSWORD/d' \
+        -e '/^POSTGRES_SHARED_PASSWORD/d' config/env_files/postgres.env
+
+      rancher_cli () {
+        rancher --file docker-compose.yml --file docker-compose.rancher.yml \
+          --rancher-file rancher-compose.yml "$@"
+      }
+
+      upgrade_or_stop_and_upgrade () {
+        service=$1
+
+        upgrade () {
+          rancher_cli up --env-file .env -d --pull --force-upgrade \
+            --confirm-upgrade $service
+        }
+
+        stop () {
+          rancher_cli stop $service
+        }
+
+        # try to upgrade, if it fails, stop the service and repeat the upgrade
+        upgrade || (stop && sleep 5 && upgrade)
+      }
+
+      ! rancher_cli ps $COMPOSE_PROJECT_NAME/cli || upgrade_or_stop_and_upgrade cli
+      ! rancher_cli ps $COMPOSE_PROJECT_NAME/http || upgrade_or_stop_and_upgrade http
+      ! rancher_cli ps $COMPOSE_PROJECT_NAME/celery || upgrade_or_stop_and_upgrade celery
+      ! rancher_cli ps $COMPOSE_PROJECT_NAME/celery-beat || upgrade_or_stop_and_upgrade celery-beat
+
+      # run docker system cleanup before the upgrade
+      # (not after the upgrade to prevent removing the previous images)
+      ! rancher_cli ps $COMPOSE_PROJECT_NAME/cleanup || (
+        rancher_cli start `rancher ps -q $COMPOSE_PROJECT_NAME/cleanup`)
+
+      rancher_cli up --env-file .env -d --pull --upgrade --confirm-upgrade \
+        --description "Internal $COMPOSE_PROJECT_NAME Updater"
