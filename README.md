@@ -63,6 +63,8 @@ Then you can use very simplified `pipelines/stage-prod` where there are jobs:
 * deploy services on the stage environment
 * deploy services on the prod environment
 
+![stage-prod pipeline](./diagrams/stage-prod.svg)
+
 tasks and build_descriptions directories
 ----------------------------------------
 
