@@ -63,6 +63,15 @@ Then you can use very simplified `pipelines/stage-prod` where there are jobs:
 * deploy services on the stage environment
 * deploy services on the prod environment
 
+tasks and build_descriptions directories
+----------------------------------------
+
+Tasks and build descriptions in the pipelines are referenced by paths in a
+project directory like `test-branch/tasks/rancher-exec-entrypoint.yml` or
+`test-branch/build_descriptions/deploy-test-env.txt`. To make it work, you
+should place referenced tasks and build description in the `tasks` and
+`build_descriptions` directories in the project repository, respectively.
+
 Credentials
 -----------
 
