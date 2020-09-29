@@ -1,0 +1,135 @@
+resource_types:
+  - name: bitbucket-build-status
+    type: registry-image
+    source:
+      repository: mgbi/bitbucket-build-status-resource
+
+resources:
+- name: stage-branch
+  type: git
+  source:
+    uri: ((repo-uri))
+    branch: stage
+    private_key: ((private-repo-key))
+    
+- name: build-status
+  type: bitbucket-build-status
+  source:
+    driver: Bitbucket Cloud
+    client_id: ((bitbucket-client-id))
+    client_secret: ((bitbucket-client-secret))
+    repository: ((bitbucket-repository))
+
+- name: stage-image
+  type: docker-image
+  source:
+    repository: ((stage-repository))
+    username: ((stage-registry-user))
+    password: ((stage-registry-pass))
+    
+jobs:
+- name: build-prod-images
+  serial: true
+  build_logs_to_retain: 10
+  plan:
+  - get: stage-branch
+    trigger: true
+  - put: build-status
+    params:
+      build_status: INPROGRESS
+      repository: stage-branch
+      description_file: stage-branch/build_descriptions/build-prod-images.txt
+  - task: source-pre-prod
+    input_mapping:
+      source: stage-branch
+    file: stage-branch/tasks/source-pre-prod.yml
+  - get: prod-base-image
+    params:
+      save: true
+  - put: prod-image
+    params:
+      load_base: prod-base-image
+      build: stage-branch
+      dockerfile: stage-branch/((prod-image-dockerfile-path))
+      build_args:
+        BASE_IMAGE: ((prod-base-repository))
+      # only the first image is taged as latest
+      tag_as_latest: true
+    get_params:
+      # with skip_download the image is not saved
+      # skip_download: true
+      save: true
+    timeout: 10m
+  on_success:
+    put: build-status
+    params:
+      build_status: SUCCESSFUL
+      repository: stage-branch
+      description_file: stage-branch/build_descriptions/build-prod-images.txt
+  on_failure:
+    put: build-status
+    params:
+      build_status: FAILED
+      repository: stage-branch
+      description_file: stage-branch/build_descriptions/build-prod-images.txt
+
+- name: deploy-stage-env
+  serial: true
+  build_logs_to_retain: 10
+  plan:
+  - get: stage-branch
+    trigger: true
+    passed: [build-prod-images]
+  - put: build-status
+    params:
+      build_status: INPROGRESS
+      repository: stage-branch
+      description_file: stage-branch/build_descriptions/deploy-stage-env.txt
+  - task: deploy
+    input_mapping:
+      source: stage-branch
+    file: stage-branch/tasks/rancher-deploy.yml
+    params:
+      COMPOSE_PROJECT_NAME: ((compose-project-name))
+      DJANGO_SETTINGS_MODULE: ((stage-django-settings))
+      SENTRY_ENVIRONMENT: stage
+      RANCHER_URL: ((stage-rancher-url))
+      RANCHER_ACCESS_KEY: ((stage-rancher-access-key))
+      RANCHER_SECRET_KEY: ((stage-rancher-secret-key))
+      SENTRY_DSN: ((sentry-dsn))
+      SECRETS_FROM_ENV_FILES: 1
+      MONGO_REPLICA_KEYFILE_URL: ((stage-mongo-replica-keyfile-url))
+    timeout: 5m
+    attempts: 3 # for Client.Timeout exceeded while awaiting headers
+  - in_parallel:
+    - task: init-mongo-rs
+      file: stage-branch/tasks/rancher-init-mongo-rs.yml
+      params:
+        RANCHER_URL: ((stage-rancher-url))
+        RANCHER_ACCESS_KEY: ((stage-rancher-access-key))
+        RANCHER_SECRET_KEY: ((stage-rancher-secret-key))
+        RANCHER_CONTAINER_NAME: ((rancher-mongo-container-name))
+      timeout: 1m
+    # add more initial tasks here, like this:
+    #- task: import-extra-data
+    #  file: stage-branch/tasks/rancher-import-extra-data.yml
+    #  params:
+    #    RANCHER_URL: ((stage-rancher-url))
+    #    RANCHER_ACCESS_KEY: ((stage-rancher-access-key))
+    #    RANCHER_SECRET_KEY: ((stage-rancher-secret-key))
+    #    RANCHER_CONTAINER_NAME: ((rancher-main-container-name))
+    #    EXTRA_DATA_CSV_URL: ((extra-data-csv-url))
+    #    EXTRA_DATA_DIR: /media/extra_data
+    #  timeout: 15m
+  on_success:
+    put: build-status
+    params:
+      build_status: SUCCESSFUL
+      repository: stage-branch
+      description_file: stage-branch/build_descriptions/deploy-stage-env.txt
+  on_failure:
+    put: build-status
+    params:
+      build_status: FAILED
+      repository: stage-branch
+      description_file: stage-branch/build_descriptions/deploy-stage-env.txt
