@@ -9,7 +9,7 @@ resources:
   type: git
   source:
     uri: ((repo-uri))
-    branch: stage
+    branch: release/prod
     private_key: ((private-repo-key))
     
 - name: build-status
@@ -19,67 +19,15 @@ resources:
     client_id: ((bitbucket-client-id))
     client_secret: ((bitbucket-client-secret))
     repository: ((bitbucket-repository))
-
-- name: stage-image
-  type: docker-image
-  source:
-    repository: ((stage-repository))
-    username: ((stage-registry-user))
-    password: ((stage-registry-pass))
     
 jobs:
-- name: build-prod-images
-  serial: true
-  build_logs_to_retain: 10
-  plan:
-  - get: stage-branch
-    trigger: true
-  - put: build-status
-    params:
-      build_status: INPROGRESS
-      repository: stage-branch
-      description_file: stage-branch/build_descriptions/build-prod-images.txt
-  - task: source-pre-prod
-    input_mapping:
-      source: stage-branch
-    file: stage-branch/tasks/source-pre-prod.yml
-  - get: prod-base-image
-    params:
-      save: true
-  - put: prod-image
-    params:
-      load_base: prod-base-image
-      build: stage-branch
-      dockerfile: stage-branch/((prod-image-dockerfile-path))
-      build_args:
-        BASE_IMAGE: ((prod-base-repository))
-      # only the first image is taged as latest
-      tag_as_latest: true
-    get_params:
-      # with skip_download the image is not saved
-      # skip_download: true
-      save: true
-    timeout: 10m
-  on_success:
-    put: build-status
-    params:
-      build_status: SUCCESSFUL
-      repository: stage-branch
-      description_file: stage-branch/build_descriptions/build-prod-images.txt
-  on_failure:
-    put: build-status
-    params:
-      build_status: FAILED
-      repository: stage-branch
-      description_file: stage-branch/build_descriptions/build-prod-images.txt
-
 - name: deploy-stage-env
   serial: true
   build_logs_to_retain: 10
   plan:
-  - get: stage-branch
-    trigger: true
-    passed: [build-prod-images]
+#  - get: stage-branch
+#    trigger: true
+#    passed: [build-prod-images]
   - put: build-status
     params:
       build_status: INPROGRESS
@@ -91,14 +39,10 @@ jobs:
     file: stage-branch/tasks/rancher-deploy.yml
     params:
       COMPOSE_PROJECT_NAME: ((compose-project-name))
-      DJANGO_SETTINGS_MODULE: ((stage-django-settings))
-      SENTRY_ENVIRONMENT: stage
       RANCHER_URL: ((stage-rancher-url))
       RANCHER_ACCESS_KEY: ((stage-rancher-access-key))
       RANCHER_SECRET_KEY: ((stage-rancher-secret-key))
-      SENTRY_DSN: ((sentry-dsn))
-      SECRETS_FROM_ENV_FILES: 1
-      MONGO_REPLICA_KEYFILE_URL: ((stage-mongo-replica-keyfile-url))
+#      SECRETS_FROM_ENV_FILES: 1
     timeout: 5m
     attempts: 3 # for Client.Timeout exceeded while awaiting headers
   - in_parallel:
